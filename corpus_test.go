@@ -84,6 +84,14 @@ func (e *httpError) Error() string {
 	return "HTTP " + http.StatusText(e.code)
 }
 
+func logCorpusTransform(t *testing.T, label string, l corpusLine, raw, obf, deobf string) {
+	t.Helper()
+	t.Logf(
+		"%s item %d\n  raw   : %q\n  obfus : %q\n  deobf : %q",
+		label, l.num, raw, obf, deobf,
+	)
+}
+
 // parsesAsIndicator reports whether s is still recognizable as a live indicator
 // by any parser relevant to IOC activation.
 func parsesAsIndicator(s string) (reason string, live bool) {
@@ -141,6 +149,8 @@ func looksLikeBareDomain(s string) bool {
 func TestCorpusNeutralizes(t *testing.T) {
 	for _, l := range getCorpus(t) {
 		obf := Obfuscate(l.text)
+		deobf := Deobfuscate(obf)
+		logCorpusTransform(t, "neutralize", l, l.text, obf, deobf)
 		if reason, live := parsesAsIndicator(obf); live {
 			t.Errorf("item %d: still live after obfuscation\n  input: %q\n  obfus: %q\n  why:   %s",
 				l.num, l.text, obf, reason)
@@ -161,6 +171,7 @@ func TestCorpusRoundtrip(t *testing.T) {
 		}
 		obf := Obfuscate(l.text)
 		got := Deobfuscate(obf)
+		logCorpusTransform(t, "roundtrip", l, l.text, obf, got)
 		if got != l.text {
 			t.Errorf("item %d: roundtrip mismatch\n  input : %q\n  obfus : %q\n  deobf : %q",
 				l.num, l.text, obf, got)
@@ -173,6 +184,9 @@ func TestCorpusIdempotent(t *testing.T) {
 	for _, l := range getCorpus(t) {
 		once := Obfuscate(l.text)
 		twice := Obfuscate(once)
+		deobf := Deobfuscate(once)
+		logCorpusTransform(t, "idempotent", l, l.text, once, deobf)
+		t.Logf("idempotent item %d\n  once  : %q\n  twice : %q", l.num, once, twice)
 		if twice != once {
 			t.Errorf("item %d: not idempotent\n  input : %q\n  once  : %q\n  twice : %q",
 				l.num, l.text, once, twice)
