@@ -54,7 +54,7 @@ func linkifierDetects(s string) (what, span string) {
 		}
 	}
 	if loc := bareIPv6FullRe.FindStringIndex(s); loc != nil {
-		if !colonHexExtends(s, loc) {
+		if !colonHexExtends(s, loc) && ipv6CandidateBounded(s, loc) {
 			m := s[loc[0]:loc[1]]
 			if ip := net.ParseIP(m); ip != nil {
 				return "bare-IPv6", m
@@ -63,7 +63,7 @@ func linkifierDetects(s string) (what, span string) {
 	}
 	if loc := bareIPv6ShorthandRe.FindStringIndex(s); loc != nil {
 		m := s[loc[0]:loc[1]]
-		if strings.Count(m, ":") >= 2 && !colonHexExtends(s, loc) {
+		if strings.Count(m, ":") >= 2 && !colonHexExtends(s, loc) && ipv6CandidateBounded(s, loc) {
 			if ip := net.ParseIP(m); ip != nil {
 				return "bare-IPv6", m
 			}
@@ -95,6 +95,25 @@ func colonHexExtends(s string, loc []int) bool {
 		return true
 	}
 	return false
+}
+
+func ipv6CandidateBounded(s string, loc []int) bool {
+	if loc[0] > 0 && isIPv6RunChar(s[loc[0]-1]) {
+		return false
+	}
+	if loc[1] < len(s) && isIPv6RunChar(s[loc[1]]) {
+		return false
+	}
+	return true
+}
+
+func isIPv6RunChar(c byte) bool {
+	if c == ':' || c == '.' || c == '%' {
+		return true
+	}
+	return (c >= '0' && c <= '9') ||
+		(c >= 'a' && c <= 'f') ||
+		(c >= 'A' && c <= 'F')
 }
 
 func looksLikeIPv6Inner(s string) bool {
