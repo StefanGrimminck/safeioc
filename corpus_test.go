@@ -153,64 +153,101 @@ func looksLikeBareDomain(s string) bool {
 }
 
 // TestCorpusNeutralizes verifies that every WPT URL input, once obfuscated,
-// is rejected by URL/IP/email parsers.
+// is rejected by URL/IP/email parsers. Every item is tested (including
+// non-IOC-shaped parser-stress inputs); only IOC-shaped items are logged
+// per-line so the reviewer audit trail stays focused on real indicators.
+// Failures are always logged regardless of shape.
 func TestCorpusNeutralizes(t *testing.T) {
 	lines := getCorpus(t)
-	failures := 0
+	logged, skippedNotIOC, failures := 0, 0, 0
 	for _, l := range lines {
 		obf := Obfuscate(l.text)
-		deobf := Deobfuscate(obf)
-		logCorpusTransform(t, "neutralize", l, l.text, obf, deobf)
-		if reason, live := parsesAsIndicator(obf); live {
+		reason, live := parsesAsIndicator(obf)
+		ioc := isRelevantIOC(l.text)
+		if ioc {
+			logged++
+			deobf := Deobfuscate(obf)
+			logCorpusTransform(t, "neutralize", l, l.text, obf, deobf)
+		} else {
+			skippedNotIOC++
+		}
+		if live {
 			failures++
+			if !ioc {
+				deobf := Deobfuscate(obf)
+				logCorpusTransform(t, "neutralize-FAIL-not-IOC", l, l.text, obf, deobf)
+			}
 			t.Errorf("item %d: still live after obfuscation\n  input: %q\n  obfus: %q\n  why:   %s",
 				l.num, l.text, obf, reason)
 		}
 	}
-	t.Logf("neutralizes: %d items tested, %d failures", len(lines), failures)
+	t.Logf("neutralizes: %d items tested, %d logged (IOC-shaped), %d silently tested (not-IOC-shaped parser-stress), %d failures",
+		len(lines), logged, skippedNotIOC, failures)
 }
 
 // TestCorpusRoundtrip verifies that Deobfuscate(Obfuscate(x)) is identical
-// to x byte for byte.
-//
-// Entries whose raw text already contains Safe-IOC bracket tokens (e.g.
-// "http://[:]") are skipped: those are malformed WPT parser stress tests,
-// not real IOCs, and the token ambiguity is a known, accepted limitation.
+// to x byte for byte. Only IOC-shaped items are logged per-line; non-IOC
+// parser-stress inputs are still tested (silently). Entries whose raw text
+// already contains Safe-IOC bracket tokens are skipped (token ambiguity is
+// a known, accepted limitation).
 func TestCorpusRoundtrip(t *testing.T) {
 	lines := getCorpus(t)
-	skipped, failures := 0, 0
+	logged, skippedNotIOC, skippedPreObf, failures := 0, 0, 0, 0
 	for _, l := range lines {
 		if containsObfuscationTokens(l.text) {
-			skipped++
+			skippedPreObf++
 			continue
 		}
 		obf := Obfuscate(l.text)
 		got := Deobfuscate(obf)
-		logCorpusTransform(t, "roundtrip", l, l.text, obf, got)
+		ioc := isRelevantIOC(l.text)
+		if ioc {
+			logged++
+			logCorpusTransform(t, "roundtrip", l, l.text, obf, got)
+		} else {
+			skippedNotIOC++
+		}
 		if got != l.text {
 			failures++
+			if !ioc {
+				logCorpusTransform(t, "roundtrip-FAIL-not-IOC", l, l.text, obf, got)
+			}
 			t.Errorf("item %d: roundtrip mismatch\n  input : %q\n  obfus : %q\n  deobf : %q",
 				l.num, l.text, obf, got)
 		}
 	}
-	t.Logf("roundtrip: %d items tested, %d skipped (pre-obfuscated), %d failures", len(lines)-skipped, skipped, failures)
+	t.Logf("roundtrip: %d items tested, %d logged (IOC-shaped), %d silently tested (not-IOC-shaped parser-stress), %d skipped (pre-obfuscated), %d failures",
+		len(lines), logged, skippedNotIOC, skippedPreObf, failures)
 }
 
 // TestCorpusIdempotent verifies that Obfuscate(Obfuscate(x)) == Obfuscate(x).
+// Only IOC-shaped items are logged per-line; non-IOC parser-stress inputs
+// are still tested (silently).
 func TestCorpusIdempotent(t *testing.T) {
 	lines := getCorpus(t)
-	failures := 0
+	logged, skippedNotIOC, failures := 0, 0, 0
 	for _, l := range lines {
 		once := Obfuscate(l.text)
 		twice := Obfuscate(once)
-		deobf := Deobfuscate(once)
-		logCorpusTransform(t, "idempotent", l, l.text, once, deobf)
-		t.Logf("idempotent item %d\n  once  : %q\n  twice : %q", l.num, maskBreak(once), maskBreak(twice))
+		ioc := isRelevantIOC(l.text)
+		if ioc {
+			logged++
+			deobf := Deobfuscate(once)
+			logCorpusTransform(t, "idempotent", l, l.text, once, deobf)
+			t.Logf("idempotent item %d\n  once  : %q\n  twice : %q", l.num, maskBreak(once), maskBreak(twice))
+		} else {
+			skippedNotIOC++
+		}
 		if twice != once {
 			failures++
+			if !ioc {
+				deobf := Deobfuscate(once)
+				logCorpusTransform(t, "idempotent-FAIL-not-IOC", l, l.text, once, deobf)
+			}
 			t.Errorf("item %d: not idempotent\n  input : %q\n  once  : %q\n  twice : %q",
 				l.num, l.text, once, twice)
 		}
 	}
-	t.Logf("idempotent: %d items tested, %d failures", len(lines), failures)
+	t.Logf("idempotent: %d items tested, %d logged (IOC-shaped), %d silently tested (not-IOC-shaped parser-stress), %d failures",
+		len(lines), logged, skippedNotIOC, failures)
 }
