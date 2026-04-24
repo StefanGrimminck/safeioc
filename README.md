@@ -81,9 +81,12 @@ The algorithm follows the four steps in the specification:
    replace `:` with `[:]` and any embedded IPv4 dots with `[.]`. Bare IPv6
    addresses (with `::` or the full eight-group form) receive the same
    colon-bracketing.
-4. **Nested indicators** - obfuscate recognizable nested URLs, email addresses,
-   and IPv4 literals that appear in the Path, Query, or Fragment in place.
-   Dots and colons outside a recognized indicator are left untouched.
+4. **Nested indicators** - obfuscate recognizable nested URIs (with a scheme,
+   including `mailto:`), bare email addresses, and bare IPv4/IPv6 literals
+   that appear in the Path, Query, or Fragment, by recursively applying
+   Steps 1-3 to the matched span. Dots, `@`, and `:` characters outside a
+   recognized indicator are preserved verbatim (file extensions, query
+   values, and fragment labels are never touched).
 
 Already-obfuscated tokens (`[.]`, `[:]`, `[@]`, `[scheme]`) are treated as
 opaque, so the transformation is idempotent.
@@ -107,7 +110,7 @@ go test -short ./...       # skip network corpus fetch
 go test -bench=. -benchmem ./...
 ```
 
-The test suite runs three independent oracles against every unit vector and
+The test suite runs four independent oracles against every unit vector and
 against every URL input in the
 [WPT URL test data](https://github.com/web-platform-tests/wpt/blob/master/url/resources/urltestdata.json)
 (fetched at test time, not bundled):
@@ -116,6 +119,17 @@ against every URL input in the
    `net/mail` all reject the obfuscated form.
 2. **Exact round-trip** - `Deobfuscate(Obfuscate(x)) == x` byte for byte.
 3. **Idempotency** - `Obfuscate(Obfuscate(x)) == Obfuscate(x)`.
+4. **Defeats a linkifier** - a regex-based URL/email/IP detector modelled on
+   UTS #58 finds no link in any obfuscated output. Bare domain names inside
+   paths, queries, or fragments are an accepted limitation of purely
+   syntactic recognition and are recorded as a separate PASS category
+   rather than a failure.
+
+Every corpus item is logged per-line in the CI output (PASS / SKIP /
+tolerated), so the Actions run can be cited as a per-entry audit trail.
+Credential-shaped URL substrings in log output have a U+200B inserted so
+GitHub Actions log masking does not redact them; test assertions always
+use the unmodified strings.
 
 ## Reference
 

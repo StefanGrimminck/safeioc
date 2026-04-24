@@ -49,6 +49,7 @@ var obfuscationVectors = []vector{
 	{"IPv6 with embedded IPv4 non-mapped", "http://[2001:db8::192.0.2.1]/", "[http]://[2001[:]db8[:][:]192[.]0[.]2[.]1]/"},
 	{"URL with bare IPv6 in query (Step 4)", "http://example.com/?ip=2001:db8::1", "[http]://example[.]com/?ip=2001[:]db8[:][:]1"},
 	{"URL with bare IPv6 in fragment (Step 4)", "http://example.com/#ip=2001:db8::1", "[http]://example[.]com/#ip=2001[:]db8[:][:]1"},
+	{"URL with nested mailto in query (Step 4)", "http://example.com/?r=mailto:abuse@evil.example", "[http]://example[.]com/?r=[mailto]:abuse[@]evil[.]example"},
 }
 
 // forwardOnlyVectors exercise transformations where Deobfuscate is not

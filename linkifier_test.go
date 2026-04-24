@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -141,33 +142,61 @@ func lastLabel(s string) string {
 	return s
 }
 
-// isRelevantIOC returns true for entries that represent real threat indicators.
-// WPT parser stress tests with malformed brackets, protocol-relative URLs,
-// double-colon scheme constructs, and empty-host URLs are excluded because
-// they are not indicators an analyst would share.
-func isRelevantIOC(s string) bool {
+// isRelevantIOCReason returns the empty string if s looks like a real
+// threat indicator an analyst would share, or a short reason explaining
+// why it was rejected as a parser-stress / non-IOC input.
+func isRelevantIOCReason(s string) string {
 	if strings.ContainsAny(s, "\t\r\n") {
-		return false
+		return "contains control whitespace (\\t/\\r/\\n)"
 	}
 	if strings.HasPrefix(s, "/") {
-		return false
+		return "starts with '/' (path-only or protocol-relative URL)"
 	}
 	if strings.Contains(s, "://") {
 		u, err := url.Parse(s)
-		if err != nil || u.Host == "" {
-			return false
+		if err != nil {
+			return "url.Parse: " + classifyParseErr(err.Error())
 		}
-		return true
+		if u.Host == "" {
+			return "url.Parse returned empty host"
+		}
+		return ""
 	}
 	// No "://" separator: accept bare indicators but reject entries with a
-	// scheme-like prefix immediately followed by "::" (WPT double-colon tests
-	// such as "http::@c:29" or "sc::a@example.net").
+	// scheme-like prefix immediately followed by "::" (WPT double-colon
+	// stress tests such as "http::@c:29" or "sc::a@example.net").
 	if idx := strings.Index(s, "::"); idx > 0 && idx < 10 {
 		if !strings.ContainsAny(s[:idx], ":/[") {
-			return false
+			return "double-colon parser stress (e.g., 'http::@c:29')"
 		}
 	}
-	return true
+	return ""
+}
+
+func isRelevantIOC(s string) bool { return isRelevantIOCReason(s) == "" }
+
+// classifyParseErr collapses a url.Parse error message into a reusable
+// category so that per-item URL substrings do not fragment the reason
+// breakdown into one bucket per input.
+func classifyParseErr(msg string) string {
+	switch {
+	case strings.Contains(msg, "invalid port"):
+		return "invalid port"
+	case strings.Contains(msg, "invalid host"):
+		return "invalid host (ParseAddr)"
+	case strings.Contains(msg, "invalid character") && strings.Contains(msg, "host name"):
+		return "invalid character in host"
+	case strings.Contains(msg, "invalid userinfo"):
+		return "invalid userinfo"
+	case strings.Contains(msg, "invalid URL escape"):
+		return "invalid percent-encoding"
+	case strings.Contains(msg, "invalid control character"):
+		return "invalid control character"
+	case strings.Contains(msg, "missing ']'"):
+		return "unmatched '[' in host"
+	default:
+		return "other"
+	}
 }
 
 // TestLinkifierBaseline confirms the detector is meaningful before obfuscation.
@@ -195,17 +224,19 @@ func TestLinkifierBaseline(t *testing.T) {
 // which uses real URL/IP/email parsers.
 func TestCorpusDefeatsLinkifier(t *testing.T) {
 	lines := getCorpus(t)
-	notIOC, notDetected, tested, tolerated, failures := 0, 0, 0, 0, 0
+	notIOCByReason := map[string]int{}
+	notDetected, tested, tolerated, failures := 0, 0, 0, 0
 	for _, l := range lines {
-		if !isRelevantIOC(l.text) {
-			notIOC++
-			t.Logf("defeats-linkifier item %d: SKIP (not IOC-shaped)\n  raw   : %q", l.num, maskBreak(l.text))
+		if reason := isRelevantIOCReason(l.text); reason != "" {
+			notIOCByReason[reason]++
+			t.Logf("defeats-linkifier item %d: SKIP not-IOC [%s]\n  raw   : %q",
+				l.num, reason, maskBreak(l.text))
 			continue
 		}
 		preWhat, _ := linkifierDetects(l.text)
 		if preWhat == "" {
 			notDetected++
-			t.Logf("defeats-linkifier item %d: SKIP (linkifier did not detect pre-obfuscation)\n  raw   : %q",
+			t.Logf("defeats-linkifier item %d: SKIP linkifier-no-match-pre-obfuscation [IOC-shaped but no linkifier pattern matched]\n  raw   : %q",
 				l.num, maskBreak(l.text))
 			continue
 		}
@@ -226,8 +257,20 @@ func TestCorpusDefeatsLinkifier(t *testing.T) {
 				l.num, postWhat, span, l.text, obf)
 		}
 	}
-	t.Logf("defeats-linkifier: %d total, %d skipped (not IOC), %d skipped (not detected pre-obfuscation), %d tested, %d tolerated (bare-domain), %d failures",
-		len(lines), notIOC, notDetected, tested, tolerated, failures)
+	notIOCTotal := 0
+	for _, c := range notIOCByReason {
+		notIOCTotal += c
+	}
+	reasons := make([]string, 0, len(notIOCByReason))
+	for r := range notIOCByReason {
+		reasons = append(reasons, r)
+	}
+	sort.Strings(reasons)
+	t.Logf("defeats-linkifier: %d total, %d skipped-not-IOC, %d skipped-linkifier-no-match, %d tested, %d tolerated (bare-domain), %d failures",
+		len(lines), notIOCTotal, notDetected, tested, tolerated, failures)
+	for _, r := range reasons {
+		t.Logf("  not-IOC reason breakdown: %4d  %s", notIOCByReason[r], r)
+	}
 }
 
 // TestLinkifierOnUnitVectors runs the linkifier against every unit test vector.
