@@ -159,10 +159,10 @@ func TestCorpusNeutralizes(t *testing.T) {
 	failures := 0
 	for _, l := range lines {
 		obf := Obfuscate(l.text)
+		deobf := Deobfuscate(obf)
+		logCorpusTransform(t, "neutralize", l, l.text, obf, deobf)
 		if reason, live := parsesAsIndicator(obf); live {
 			failures++
-			deobf := Deobfuscate(obf)
-			logCorpusTransform(t, "neutralize", l, l.text, obf, deobf)
 			t.Errorf("item %d: still live after obfuscation\n  input: %q\n  obfus: %q\n  why:   %s",
 				l.num, l.text, obf, reason)
 		}
@@ -186,9 +186,9 @@ func TestCorpusRoundtrip(t *testing.T) {
 		}
 		obf := Obfuscate(l.text)
 		got := Deobfuscate(obf)
+		logCorpusTransform(t, "roundtrip", l, l.text, obf, got)
 		if got != l.text {
 			failures++
-			logCorpusTransform(t, "roundtrip", l, l.text, obf, got)
 			t.Errorf("item %d: roundtrip mismatch\n  input : %q\n  obfus : %q\n  deobf : %q",
 				l.num, l.text, obf, got)
 		}
@@ -203,10 +203,11 @@ func TestCorpusIdempotent(t *testing.T) {
 	for _, l := range lines {
 		once := Obfuscate(l.text)
 		twice := Obfuscate(once)
+		deobf := Deobfuscate(once)
+		logCorpusTransform(t, "idempotent", l, l.text, once, deobf)
+		t.Logf("idempotent item %d\n  once  : %q\n  twice : %q", l.num, maskBreak(once), maskBreak(twice))
 		if twice != once {
 			failures++
-			deobf := Deobfuscate(once)
-			logCorpusTransform(t, "idempotent", l, l.text, once, deobf)
 			t.Errorf("item %d: not idempotent\n  input : %q\n  once  : %q\n  twice : %q",
 				l.num, l.text, once, twice)
 		}

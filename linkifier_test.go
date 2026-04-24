@@ -195,27 +195,39 @@ func TestLinkifierBaseline(t *testing.T) {
 // which uses real URL/IP/email parsers.
 func TestCorpusDefeatsLinkifier(t *testing.T) {
 	lines := getCorpus(t)
-	notIOC, notDetected, failures := 0, 0, 0
+	notIOC, notDetected, tested, tolerated, failures := 0, 0, 0, 0, 0
 	for _, l := range lines {
 		if !isRelevantIOC(l.text) {
 			notIOC++
+			t.Logf("defeats-linkifier item %d: SKIP (not IOC-shaped)\n  raw   : %q", l.num, maskBreak(l.text))
 			continue
 		}
-		if what, _ := linkifierDetects(l.text); what == "" {
+		preWhat, _ := linkifierDetects(l.text)
+		if preWhat == "" {
 			notDetected++
+			t.Logf("defeats-linkifier item %d: SKIP (linkifier did not detect pre-obfuscation)\n  raw   : %q",
+				l.num, maskBreak(l.text))
 			continue
 		}
 		obf := Obfuscate(l.text)
-		what, span := linkifierDetects(obf)
-		if what == "" || what == "bare-domain" {
-			continue
+		postWhat, span := linkifierDetects(obf)
+		switch {
+		case postWhat == "":
+			tested++
+			t.Logf("defeats-linkifier item %d: PASS (pre=%s, post=none)\n  raw   : %q\n  obfus : %q",
+				l.num, preWhat, maskBreak(l.text), maskBreak(obf))
+		case postWhat == "bare-domain":
+			tolerated++
+			t.Logf("defeats-linkifier item %d: PASS-bare-domain (Step 4 limitation, pre=%s, post=bare-domain %q)\n  raw   : %q\n  obfus : %q",
+				l.num, preWhat, span, maskBreak(l.text), maskBreak(obf))
+		default:
+			failures++
+			t.Errorf("item %d: linkifier detects %s %q in obfuscated output\n  raw  : %q\n  obfus: %q",
+				l.num, postWhat, span, l.text, obf)
 		}
-		failures++
-		t.Errorf("item %d: linkifier detects %s %q in obfuscated output\n  raw  : %q\n  obfus: %q",
-			l.num, what, span, l.text, obf)
 	}
-	t.Logf("defeats-linkifier: %d total, %d skipped (not IOC), %d skipped (not detected pre-obfuscation), %d failures",
-		len(lines), notIOC, notDetected, failures)
+	t.Logf("defeats-linkifier: %d total, %d skipped (not IOC), %d skipped (not detected pre-obfuscation), %d tested, %d tolerated (bare-domain), %d failures",
+		len(lines), notIOC, notDetected, tested, tolerated, failures)
 }
 
 // TestLinkifierOnUnitVectors runs the linkifier against every unit test vector.
