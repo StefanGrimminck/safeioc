@@ -162,15 +162,47 @@ func isRelevantIOCReason(s string) string {
 		}
 		return ""
 	}
-	// No "://" separator: accept bare indicators but reject entries with a
-	// scheme-like prefix immediately followed by "::" (WPT double-colon
-	// stress tests such as "http::@c:29" or "sc::a@example.net").
+	// No "://" separator: additional heuristics so that bare file paths
+	// and punctuation-only fragments are not mistaken for IOCs.
+	if s == "" {
+		return "empty string"
+	}
+	if strings.HasPrefix(s, ".") {
+		return "starts with '.' (relative path: '.', '..', './x', '../x')"
+	}
+	if strings.HasPrefix(s, "#") || strings.HasPrefix(s, "?") {
+		return "starts with '#' or '?' (fragment- or query-only scrap)"
+	}
+	// Leading ':' is parser-stress junk unless it is the start of a bare
+	// IPv6 literal (e.g., "::1").
+	if strings.HasPrefix(s, ":") && !strings.HasPrefix(s, "::") {
+		return "starts with ':' without being a bare IPv6 literal"
+	}
+	if !containsAlphaNum(s) {
+		return "no letter or digit (punctuation-only)"
+	}
+	if !strings.ContainsAny(s, ".@:") {
+		return "no '.', '@', or ':' anywhere (nothing to defang)"
+	}
+	// Reject entries with a scheme-like prefix immediately followed by "::"
+	// (WPT double-colon stress tests such as "http::@c:29" or
+	// "sc::a@example.net").
 	if idx := strings.Index(s, "::"); idx > 0 && idx < 10 {
 		if !strings.ContainsAny(s[:idx], ":/[") {
 			return "double-colon parser stress (e.g., 'http::@c:29')"
 		}
 	}
 	return ""
+}
+
+func containsAlphaNum(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			return true
+		}
+	}
+	return false
 }
 
 func isRelevantIOC(s string) bool { return isRelevantIOCReason(s) == "" }
