@@ -87,9 +87,17 @@ func (e *httpError) Error() string {
 func logCorpusTransform(t *testing.T, label string, l corpusLine, raw, obf, deobf string) {
 	t.Helper()
 	t.Logf(
-		"%s item %d\n  raw   : %q\n  obfus : %q\n  deobf : %q",
-		label, l.num, raw, obf, deobf,
+		"%s item %d [strings ZWS-escaped for Actions masking]\n  raw   : %q\n  obfus : %q\n  deobf : %q",
+		label, l.num, maskBreak(raw), maskBreak(obf), maskBreak(deobf),
 	)
+}
+
+// maskBreak inserts U+200B after "://" and before "@" to prevent GitHub
+// Actions from redacting credential-shaped URL patterns in log output.
+func maskBreak(s string) string {
+	s = strings.ReplaceAll(s, "://", "://​")
+	s = strings.ReplaceAll(s, ":@", ":​@")
+	return s
 }
 
 // parsesAsIndicator reports whether s is still recognizable as a live indicator
@@ -147,15 +155,19 @@ func looksLikeBareDomain(s string) bool {
 // TestCorpusNeutralizes verifies that every WPT URL input, once obfuscated,
 // is rejected by URL/IP/email parsers.
 func TestCorpusNeutralizes(t *testing.T) {
-	for _, l := range getCorpus(t) {
+	lines := getCorpus(t)
+	failures := 0
+	for _, l := range lines {
 		obf := Obfuscate(l.text)
-		deobf := Deobfuscate(obf)
-		logCorpusTransform(t, "neutralize", l, l.text, obf, deobf)
 		if reason, live := parsesAsIndicator(obf); live {
+			failures++
+			deobf := Deobfuscate(obf)
+			logCorpusTransform(t, "neutralize", l, l.text, obf, deobf)
 			t.Errorf("item %d: still live after obfuscation\n  input: %q\n  obfus: %q\n  why:   %s",
 				l.num, l.text, obf, reason)
 		}
 	}
+	t.Logf("neutralizes: %d items tested, %d failures", len(lines), failures)
 }
 
 // TestCorpusRoundtrip verifies that Deobfuscate(Obfuscate(x)) is identical
@@ -165,31 +177,39 @@ func TestCorpusNeutralizes(t *testing.T) {
 // "http://[:]") are skipped: those are malformed WPT parser stress tests,
 // not real IOCs, and the token ambiguity is a known, accepted limitation.
 func TestCorpusRoundtrip(t *testing.T) {
-	for _, l := range getCorpus(t) {
+	lines := getCorpus(t)
+	skipped, failures := 0, 0
+	for _, l := range lines {
 		if containsObfuscationTokens(l.text) {
+			skipped++
 			continue
 		}
 		obf := Obfuscate(l.text)
 		got := Deobfuscate(obf)
-		logCorpusTransform(t, "roundtrip", l, l.text, obf, got)
 		if got != l.text {
+			failures++
+			logCorpusTransform(t, "roundtrip", l, l.text, obf, got)
 			t.Errorf("item %d: roundtrip mismatch\n  input : %q\n  obfus : %q\n  deobf : %q",
 				l.num, l.text, obf, got)
 		}
 	}
+	t.Logf("roundtrip: %d items tested, %d skipped (pre-obfuscated), %d failures", len(lines)-skipped, skipped, failures)
 }
 
 // TestCorpusIdempotent verifies that Obfuscate(Obfuscate(x)) == Obfuscate(x).
 func TestCorpusIdempotent(t *testing.T) {
-	for _, l := range getCorpus(t) {
+	lines := getCorpus(t)
+	failures := 0
+	for _, l := range lines {
 		once := Obfuscate(l.text)
 		twice := Obfuscate(once)
-		deobf := Deobfuscate(once)
-		logCorpusTransform(t, "idempotent", l, l.text, once, deobf)
-		t.Logf("idempotent item %d\n  once  : %q\n  twice : %q", l.num, once, twice)
 		if twice != once {
+			failures++
+			deobf := Deobfuscate(once)
+			logCorpusTransform(t, "idempotent", l, l.text, once, deobf)
 			t.Errorf("item %d: not idempotent\n  input : %q\n  once  : %q\n  twice : %q",
 				l.num, l.text, once, twice)
 		}
 	}
+	t.Logf("idempotent: %d items tested, %d failures", len(lines), failures)
 }

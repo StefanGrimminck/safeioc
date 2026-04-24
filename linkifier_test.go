@@ -194,11 +194,15 @@ func TestLinkifierBaseline(t *testing.T) {
 // limitation. The authoritative neutralization oracle is TestCorpusNeutralizes,
 // which uses real URL/IP/email parsers.
 func TestCorpusDefeatsLinkifier(t *testing.T) {
-	for _, l := range getCorpus(t) {
+	lines := getCorpus(t)
+	notIOC, notDetected, failures := 0, 0, 0
+	for _, l := range lines {
 		if !isRelevantIOC(l.text) {
+			notIOC++
 			continue
 		}
 		if what, _ := linkifierDetects(l.text); what == "" {
+			notDetected++
 			continue
 		}
 		obf := Obfuscate(l.text)
@@ -206,9 +210,12 @@ func TestCorpusDefeatsLinkifier(t *testing.T) {
 		if what == "" || what == "bare-domain" {
 			continue
 		}
+		failures++
 		t.Errorf("item %d: linkifier detects %s %q in obfuscated output\n  raw  : %q\n  obfus: %q",
 			l.num, what, span, l.text, obf)
 	}
+	t.Logf("defeats-linkifier: %d total, %d skipped (not IOC), %d skipped (not detected pre-obfuscation), %d failures",
+		len(lines), notIOC, notDetected, failures)
 }
 
 // TestLinkifierOnUnitVectors runs the linkifier against every unit test vector.
