@@ -42,9 +42,10 @@ func Obfuscate(s string) string {
 			writeObfuscatedIPv6(&b, s[:m])
 			i = m
 		} else if sLen, sepLen, ok := matchScheme(s, 0); ok && acceptAtTop(s[:sLen], sepLen) {
-			// Step 1: wrap scheme.
+			// Step 1: wrap scheme. Case is preserved verbatim so that the
+			// transformation is reversible byte-for-byte.
 			b.WriteByte('[')
-			writeLower(&b, s[:sLen])
+			b.WriteString(s[:sLen])
 			b.WriteByte(']')
 			b.WriteString(s[sLen : sLen+sepLen])
 			// Steps 2+3: authority; Step 4 tail handled below.
@@ -183,14 +184,17 @@ func tryNestedIndicator(b *strings.Builder, s string, pos, end int) (int, bool) 
 		scheme := s[pos : pos+sLen]
 		if sepLen == 3 {
 			b.WriteByte('[')
-			writeLower(b, scheme)
+			b.WriteString(scheme)
 			b.WriteByte(']')
 			b.WriteString("://")
 			return processAuthority(b, s, pos+sLen+sepLen, end, true, false), true
 		}
 		if sepLen == 1 && sLen == 6 && strings.EqualFold(scheme, "mailto") {
 			if matchEmail(s, pos+7) > 0 {
-				b.WriteString("[mailto]:")
+				b.WriteByte('[')
+				b.WriteString(scheme)
+				b.WriteByte(']')
+				b.WriteByte(':')
 				return processAuthority(b, s, pos+7, end, false, false), true
 			}
 		}
@@ -520,15 +524,6 @@ func writeObfuscatedAtDot(b *strings.Builder, s string) {
 	}
 }
 
-func writeLower(b *strings.Builder, s string) {
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c >= 'A' && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		b.WriteByte(c)
-	}
-}
 
 func isHexDigit(c byte) bool {
 	return (c >= '0' && c <= '9') ||

@@ -314,13 +314,6 @@ func TestLinkifierOnUnitVectors(t *testing.T) {
 				v.name, what, span, out)
 		}
 	}
-	for _, v := range forwardOnlyVectors {
-		out := Obfuscate(v.in)
-		if what, span := linkifierDetects(out); what != "" {
-			t.Errorf("%s: linkifier detects %s %q in obfuscated output %q",
-				v.name, what, span, out)
-		}
-	}
 }
 
 // TestLinkifierSelfCheck verifies the detector catches at least two thirds

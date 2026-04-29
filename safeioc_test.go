@@ -50,14 +50,8 @@ var obfuscationVectors = []vector{
 	{"URL with bare IPv6 in query (Step 4)", "http://example.com/?ip=2001:db8::1", "[http]://example[.]com/?ip=2001[:]db8[:][:]1"},
 	{"URL with bare IPv6 in fragment (Step 4)", "http://example.com/#ip=2001:db8::1", "[http]://example[.]com/#ip=2001[:]db8[:][:]1"},
 	{"URL with nested mailto in query (Step 4)", "http://example.com/?r=mailto:abuse@evil.example", "[http]://example[.]com/?r=[mailto]:abuse[@]evil[.]example"},
-}
-
-// forwardOnlyVectors exercise transformations where Deobfuscate is not
-// expected to reproduce the exact input byte-for-byte (e.g., scheme
-// case-normalization, a draft SHOULD).
-var forwardOnlyVectors = []vector{
-	{"Mixed-case scheme lowercased", "HTTP://Example.COM/", "[http]://Example[.]COM/"},
-	{"Upper-case HTTPS scheme", "HTTPS://bad.example", "[https]://bad[.]example"},
+	{"Mixed-case scheme preserved", "HTTP://Example.COM/", "[HTTP]://Example[.]COM/"},
+	{"Upper-case HTTPS scheme preserved", "HTTPS://bad.example", "[HTTPS]://bad[.]example"},
 }
 
 var idempotencyVectors = []vector{
@@ -74,12 +68,6 @@ var legacyDeobfuscationVectors = []vector{
 
 func TestObfuscate(t *testing.T) {
 	for _, v := range obfuscationVectors {
-		got := Obfuscate(v.in)
-		if got != v.out {
-			t.Errorf("%s: Obfuscate(%q) = %q, want %q", v.name, v.in, got, v.out)
-		}
-	}
-	for _, v := range forwardOnlyVectors {
 		got := Obfuscate(v.in)
 		if got != v.out {
 			t.Errorf("%s: Obfuscate(%q) = %q, want %q", v.name, v.in, got, v.out)
@@ -106,13 +94,6 @@ func TestIdempotency(t *testing.T) {
 		}
 	}
 	for _, v := range obfuscationVectors {
-		once := Obfuscate(v.in)
-		twice := Obfuscate(once)
-		if twice != once {
-			t.Errorf("%s: re-applying Obfuscate changed output: %q -> %q", v.name, once, twice)
-		}
-	}
-	for _, v := range forwardOnlyVectors {
 		once := Obfuscate(v.in)
 		twice := Obfuscate(once)
 		if twice != once {
