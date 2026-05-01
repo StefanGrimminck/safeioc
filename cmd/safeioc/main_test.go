@@ -11,7 +11,7 @@ import (
 func TestStreamLinesObfuscate(t *testing.T) {
 	in := strings.NewReader("https://bad.example\nphish@target.example\n")
 	var out bytes.Buffer
-	if err := streamLines(in, &out,safeioc.Obfuscate); err != nil {
+	if err := streamLines(in, &out, safeioc.Obfuscate); err != nil {
 		t.Fatalf("streamLines: %v", err)
 	}
 	want := "[https]://bad[.]example\nphish[@]target[.]example\n"
@@ -23,7 +23,7 @@ func TestStreamLinesObfuscate(t *testing.T) {
 func TestStreamLinesDeobfuscate(t *testing.T) {
 	in := strings.NewReader("[https]://bad[.]example\nhxxps://attacker[.]example\n")
 	var out bytes.Buffer
-	if err := streamLines(in, &out,safeioc.Deobfuscate); err != nil {
+	if err := streamLines(in, &out, safeioc.Deobfuscate); err != nil {
 		t.Fatalf("streamLines: %v", err)
 	}
 	want := "https://bad.example\nhttps://attacker.example\n"
@@ -35,7 +35,7 @@ func TestStreamLinesDeobfuscate(t *testing.T) {
 func TestStreamLinesEmptyInput(t *testing.T) {
 	in := strings.NewReader("")
 	var out bytes.Buffer
-	if err := streamLines(in, &out,safeioc.Obfuscate); err != nil {
+	if err := streamLines(in, &out, safeioc.Obfuscate); err != nil {
 		t.Fatalf("streamLines: %v", err)
 	}
 	if got := out.String(); got != "" {
@@ -46,7 +46,7 @@ func TestStreamLinesEmptyInput(t *testing.T) {
 func TestStreamLinesCRLF(t *testing.T) {
 	in := strings.NewReader("https://bad.example\r\nhttps://evil.example\r\n")
 	var out bytes.Buffer
-	if err := streamLines(in, &out,safeioc.Obfuscate); err != nil {
+	if err := streamLines(in, &out, safeioc.Obfuscate); err != nil {
 		t.Fatalf("streamLines: %v", err)
 	}
 	want := "[https]://bad[.]example\n[https]://evil[.]example\n"

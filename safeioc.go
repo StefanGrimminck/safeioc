@@ -304,6 +304,9 @@ func deobfuscateSchemes(s string) string {
 	return b.String()
 }
 
+// matchBracketedScheme matches an already-wrapped "[scheme]:" or "[scheme]://"
+// at pos. schemeEnd points past the closing "]"; sepEnd points past the full
+// separator (":" or "://").
 func matchBracketedScheme(s string, pos int) (schemeEnd, sepEnd int, ok bool) {
 	n := len(s)
 	if pos+3 >= n || s[pos] != '[' {
