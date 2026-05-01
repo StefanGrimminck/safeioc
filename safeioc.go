@@ -40,7 +40,7 @@ func Obfuscate(s string) string {
 		// otherwise match the scheme rule.
 		if m := matchBareIPv6(s, 0); m > 0 {
 			writeObfuscatedIPv6(&b, s[:m])
-			i = m
+			i = processAuthority(&b, s, m, n, true, false)
 		} else if sLen, sepLen, ok := matchScheme(s, 0); ok && acceptAtTop(s[:sLen], sepLen) {
 			// Step 1: wrap scheme. Case is preserved verbatim so that the
 			// transformation is reversible byte-for-byte.
@@ -50,6 +50,18 @@ func Obfuscate(s string) string {
 			b.WriteString(s[sLen : sLen+sepLen])
 			// Steps 2+3: authority; Step 4 tail handled below.
 			i = processAuthority(&b, s, sLen+sepLen, n, sepLen == 3, sepLen == 3)
+		}
+	} else if _, sepEnd, ok := matchBracketedScheme(s, 0); ok {
+		// Idempotency: an already-wrapped scheme followed by "://" must
+		// re-enter authority processing with the same partition the first
+		// pass used; otherwise a malformed body could be re-classified as
+		// path content and trigger Step 4 detection on a second invocation.
+		b.WriteString(s[:sepEnd])
+		if sepEnd+2 <= n && s[sepEnd] == '/' && s[sepEnd+1] == '/' {
+			b.WriteString("//")
+			i = processAuthority(&b, s, sepEnd+2, n, true, true)
+		} else {
+			i = processAuthority(&b, s, sepEnd, n, false, false)
 		}
 	}
 
@@ -109,6 +121,18 @@ func processAuthority(b *strings.Builder, s string, pos, end int, hier, tryBareI
 		}
 
 		if c == '[' {
+			if _, sepEnd, ok := matchBracketedScheme(s, i); ok && sepEnd <= end {
+				// Re-pass of an already-wrapped scheme. Restore the same
+				// authority partition the first pass used.
+				b.WriteString(s[i:sepEnd])
+				if sepEnd+2 <= end && s[sepEnd] == '/' && s[sepEnd+1] == '/' {
+					b.WriteString("//")
+					i = processAuthority(b, s, sepEnd+2, end, true, false)
+				} else {
+					i = processAuthority(b, s, sepEnd, end, false, false)
+				}
+				continue
+			}
 			if endB := findMatchingBracket(s, i); endB != -1 && endB < end {
 				inner := s[i+1 : endB]
 				switch {
@@ -137,8 +161,11 @@ func processAuthority(b *strings.Builder, s string, pos, end int, hier, tryBareI
 			}
 		}
 
-		// In opaque URI bodies, look for nested indicators before applying
-		// the default dot/at replacement.
+		// In opaque URI bodies (mailto:, urn:, ...) the draft requires only
+		// Steps 2 and 3. Running nested-indicator detection here is a strict
+		// superset: for real mailto/urn inputs the result is identical, and
+		// it correctly handles uncommon shapes such as a URI carried inside
+		// an opaque body.
 		if !hier && atBoundary(s, i) {
 			if consumed, ok := tryNestedIndicator(b, s, i, end); ok {
 				i = consumed
@@ -159,20 +186,46 @@ func processAuthority(b *strings.Builder, s string, pos, end int, hier, tryBareI
 	return i
 }
 
-// scanTail walks s[pos:end] applying Step 4: obfuscating any nested URI,
-// mailto, email, or IPv4 literal in place. Non-indicator bytes pass through
-// verbatim.
+// scanTail walks s[pos:end] applying Step 4. Opaque tokens ("[.]", "[:]",
+// "[@]") and bracketed schemes ("[scheme]:" optionally followed by "//")
+// are consumed atomically so that a tokenized re-pass partitions the input
+// at the same positions as the original raw pass.
 func scanTail(b *strings.Builder, s string, pos, end int) {
 	i := pos
+	atBound := true
 	for i < end {
-		if atBoundary(s, i) {
+		if s[i] == '[' {
+			if i+3 <= end && s[i+2] == ']' {
+				switch s[i+1] {
+				case '.', ':', '@':
+					b.WriteString(s[i : i+3])
+					i += 3
+					atBound = true
+					continue
+				}
+			}
+			if _, sepEnd, ok := matchBracketedScheme(s, i); ok && sepEnd <= end {
+				b.WriteString(s[i:sepEnd])
+				if sepEnd+2 <= end && s[sepEnd] == '/' && s[sepEnd+1] == '/' {
+					b.WriteString("//")
+					i = processAuthority(b, s, sepEnd+2, end, true, false)
+				} else {
+					i = processAuthority(b, s, sepEnd, end, false, false)
+				}
+				atBound = true
+				continue
+			}
+		}
+		if atBound || atBoundary(s, i) {
 			if consumed, ok := tryNestedIndicator(b, s, i, end); ok {
 				i = consumed
+				atBound = true
 				continue
 			}
 		}
 		b.WriteByte(s[i])
 		i++
+		atBound = false
 	}
 }
 
@@ -180,6 +233,16 @@ func scanTail(b *strings.Builder, s string, pos, end int) {
 // URI followed by a valid email, a bare email address, or a bare IPv4
 // address at pos. Returns the new position and true on a match.
 func tryNestedIndicator(b *strings.Builder, s string, pos, end int) (int, bool) {
+	if pos < end && s[pos] == '[' {
+		if _, sepEnd, ok := matchBracketedScheme(s, pos); ok && sepEnd <= end {
+			b.WriteString(s[pos:sepEnd])
+			if sepEnd+2 <= end && s[sepEnd] == '/' && s[sepEnd+1] == '/' {
+				b.WriteString("//")
+				return processAuthority(b, s, sepEnd+2, end, true, false), true
+			}
+			return processAuthority(b, s, sepEnd, end, false, false), true
+		}
+	}
 	if sLen, sepLen, ok := matchScheme(s, pos); ok {
 		scheme := s[pos : pos+sLen]
 		if sepLen == 3 {
@@ -340,18 +403,11 @@ func matchBareIPv6(s string, pos int) int {
 		}
 	}
 
-	for tryEnd := end; tryEnd >= pos+2; tryEnd-- {
-		if strings.Count(s[pos:tryEnd], ":") < 2 {
-			break
-		}
-		if tryEnd < n && isHexDigit(s[tryEnd]) {
-			continue
-		}
-		if addr, err := netip.ParseAddr(s[pos:tryEnd]); err == nil && addr.Is6() {
-			return tryEnd - pos
-		}
+	addr, err := netip.ParseAddr(s[pos:end])
+	if err != nil || !addr.Is6() {
+		return 0
 	}
-	return 0
+	return end - pos
 }
 
 // matchEmail matches a bare email address (practical subset of RFC 5322) at pos.
@@ -407,7 +463,8 @@ func matchEmail(s string, pos int) int {
 	return i - pos
 }
 
-// matchIPv4 matches a dotted-quad at pos with a trailing word boundary.
+// matchIPv4 matches a dotted-quad IPv4 address at pos with octet validation
+// (0-255) and a trailing word boundary.
 func matchIPv4(s string, pos int) int {
 	n := len(s)
 	i := pos
@@ -419,6 +476,14 @@ func matchIPv4(s string, pos int) int {
 		for j < n && j-i < 3 && isDigit(s[j]) {
 			j++
 		}
+		// Validate octet value 0-255.
+		val := 0
+		for k := i; k < j; k++ {
+			val = val*10 + int(s[k]-'0')
+		}
+		if val > 255 {
+			return 0
+		}
 		i = j
 		if octet < 3 {
 			if i >= n || s[i] != '.' {
@@ -429,7 +494,7 @@ func matchIPv4(s string, pos int) int {
 	}
 	if i < n {
 		c := s[i]
-		if isAlpha(c) || isDigit(c) || c == '.' || c == '_' {
+		if isAlpha(c) || isDigit(c) || c == '.' || c == '_' || c == '[' {
 			return 0
 		}
 	}
@@ -524,13 +589,12 @@ func writeObfuscatedAtDot(b *strings.Builder, s string) {
 	}
 }
 
-
 func isHexDigit(c byte) bool {
 	return (c >= '0' && c <= '9') ||
 		(c >= 'a' && c <= 'f') ||
 		(c >= 'A' && c <= 'F')
 }
 
-func isAlpha(c byte) bool  { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
-func isDigit(c byte) bool  { return c >= '0' && c <= '9' }
+func isAlpha(c byte) bool    { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
+func isDigit(c byte) bool    { return c >= '0' && c <= '9' }
 func isAlphaNum(c byte) bool { return isAlpha(c) || isDigit(c) }

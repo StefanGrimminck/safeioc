@@ -74,8 +74,9 @@ cat iocs.txt | safeioc -d  # stream-de-obfuscate
 The algorithm follows the four steps in the specification:
 
 1. **Scheme** - wrap the URI scheme in square brackets: `https` -> `[https]`.
-   Scheme names are normalized to lowercase. Any current or future scheme is
-   handled without a lookup table.
+   The case of the scheme name is preserved verbatim so the transformation
+   is reversible byte for byte. Any current or future scheme is handled
+   without a lookup table.
 2. **Userinfo** - replace `@` in the userinfo subcomponent with `[@]`.
 3. **Host** - replace `.` in the host with `[.]`. Inside an IPv6 literal,
    replace `:` with `[:]` and any embedded IPv4 dots with `[.]`. Bare IPv6
