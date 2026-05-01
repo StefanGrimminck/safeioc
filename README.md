@@ -111,8 +111,8 @@ go test -short ./...       # skip network corpus fetch
 go test -bench=. -benchmem ./...
 ```
 
-The test suite runs four independent oracles against every unit vector and
-against every URL input in the
+The unit vectors in `safeioc_test.go` are tested directly. The corpus tests
+run four independent oracles against every URL input in the
 [WPT URL test data](https://github.com/web-platform-tests/wpt/blob/master/url/resources/urltestdata.json)
 (fetched at test time, not bundled):
 
@@ -126,11 +126,10 @@ against every URL input in the
    syntactic recognition and are recorded as a separate PASS category
    rather than a failure.
 
-Every corpus item is logged per-line in the CI output (PASS / SKIP /
-tolerated), so the Actions run can be cited as a per-entry audit trail.
-Credential-shaped URL substrings in log output have a U+200B inserted so
-GitHub Actions log masking does not redact them; test assertions always
-use the unmodified strings.
+Every corpus item is logged per-line in the CI output so the run can be
+cited as a per-entry audit trail. Credential-shaped URL substrings in log
+output have a U+200B inserted so CI log masking does not redact them; test
+assertions always use the unmodified strings.
 
 ## Reference
 
