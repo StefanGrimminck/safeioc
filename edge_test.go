@@ -32,11 +32,14 @@ func TestObfuscateShortInputs(t *testing.T) {
 	}
 }
 
-func TestPercentEncodedDelimitersNotBracketed(t *testing.T) {
+func TestPercentEncodedDelimitersDecoded(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"http://a%2eb.example", "[http]://a%2eb[.]example"},
-		{"http://user%40host.example", "[http]://user%40host[.]example"},
-		{"a%2eb.example", "a%2eb[.]example"},
+		{"http://a%2eb.example", "[http]://a[.]b[.]example"},
+		{"http://a%2Eb.example", "[http]://a[.]b[.]example"},
+		{"http://user%40host.example", "[http]://user[@]host[.]example"},
+		{"a%2eb.example", "a[.]b[.]example"},
+		{"http://%65vil.example", "[http]://%65vil[.]example"},
+		{"http://evil%252eexample", "[http]://evil%252eexample"},
 	}
 	for _, c := range cases {
 		got := Obfuscate(c.in)

@@ -35,27 +35,21 @@ func Obfuscate(s string) string {
 	i := 0
 
 	if s[0] != '[' {
-		// Step 3 (bare IPv6): must be checked before scheme because bare
-		// IPv6 starting with alpha hex digits (e.g. "fe80::") would
-		// otherwise match the scheme rule.
+		// Bare IPv6 must be checked before scheme (alpha hex digits like
+		// "fe80::" would otherwise match the scheme rule).
 		if m := matchBareIPv6(s, 0); m > 0 {
 			writeObfuscatedIPv6(&b, s[:m])
 			i = processAuthority(&b, s, m, n, true, false)
 		} else if sLen, sepLen, ok := matchScheme(s, 0); ok && acceptAtTop(s[:sLen], sepLen) {
-			// Step 1: wrap scheme. Case is preserved verbatim so that the
-			// transformation is reversible byte-for-byte.
+			// Step 1: wrap scheme.
 			b.WriteByte('[')
 			b.WriteString(s[:sLen])
 			b.WriteByte(']')
 			b.WriteString(s[sLen : sLen+sepLen])
-			// Steps 2+3: authority; Step 4 tail handled below.
 			i = processAuthority(&b, s, sLen+sepLen, n, sepLen == 3, sepLen == 3)
 		}
 	} else if _, sepEnd, ok := matchBracketedScheme(s, 0); ok {
-		// Idempotency: an already-wrapped scheme followed by "://" must
-		// re-enter authority processing with the same partition the first
-		// pass used; otherwise a malformed body could be re-classified as
-		// path content and trigger Step 4 detection on a second invocation.
+		// Already-wrapped scheme: re-enter authority processing for idempotency.
 		b.WriteString(s[:sepEnd])
 		if sepEnd+2 <= n && s[sepEnd] == '/' && s[sepEnd+1] == '/' {
 			b.WriteString("//")
@@ -120,10 +114,32 @@ func processAuthority(b *strings.Builder, s string, pos, end int, hier, tryBareI
 			}
 		}
 
+		// Percent-encoded delimiters (%2e/%2E, %40, %3a/%3A) in Host or
+		// Userinfo are decoded to their literal form and then bracketed.
+		// Other percent-encoded content is preserved verbatim. Single-pass
+		// only: %252e and similar are not recognized as delimiter forms.
+		if c == '%' && i+3 <= end {
+			h1, h2 := s[i+1], s[i+2]
+			if h1 == '2' && (h2 == 'e' || h2 == 'E') {
+				b.WriteString("[.]")
+				i += 3
+				continue
+			}
+			if h1 == '4' && h2 == '0' {
+				b.WriteString("[@]")
+				i += 3
+				continue
+			}
+			if h1 == '3' && (h2 == 'a' || h2 == 'A') {
+				b.WriteString("[:]")
+				i += 3
+				continue
+			}
+		}
+
 		if c == '[' {
 			if _, sepEnd, ok := matchBracketedScheme(s, i); ok && sepEnd <= end {
-				// Re-pass of an already-wrapped scheme. Restore the same
-				// authority partition the first pass used.
+				// Already-wrapped scheme: pass through verbatim.
 				b.WriteString(s[i:sepEnd])
 				if sepEnd+2 <= end && s[sepEnd] == '/' && s[sepEnd+1] == '/' {
 					b.WriteString("//")
@@ -161,11 +177,6 @@ func processAuthority(b *strings.Builder, s string, pos, end int, hier, tryBareI
 			}
 		}
 
-		// In opaque URI bodies (mailto:, urn:, ...) the draft requires only
-		// Steps 2 and 3. Running nested-indicator detection here is a strict
-		// superset: for real mailto/urn inputs the result is identical, and
-		// it correctly handles uncommon shapes such as a URI carried inside
-		// an opaque body.
 		if !hier && atBoundary(s, i) {
 			if consumed, ok := tryNestedIndicator(b, s, i, end); ok {
 				i = consumed
@@ -186,10 +197,8 @@ func processAuthority(b *strings.Builder, s string, pos, end int, hier, tryBareI
 	return i
 }
 
-// scanTail walks s[pos:end] applying Step 4. Opaque tokens ("[.]", "[:]",
-// "[@]") and bracketed schemes ("[scheme]:" optionally followed by "//")
-// are consumed atomically so that a tokenized re-pass partitions the input
-// at the same positions as the original raw pass.
+// scanTail walks s[pos:end] applying Step 4. Already-obfuscated tokens and
+// bracketed schemes are consumed atomically for idempotency.
 func scanTail(b *strings.Builder, s string, pos, end int) {
 	i := pos
 	atBound := true
@@ -262,8 +271,6 @@ func tryNestedIndicator(b *strings.Builder, s string, pos, end int) (int, bool) 
 			}
 		}
 	}
-	// Don't detect bare IPv6 when preceded by '[' (inside a bracket literal)
-	// or '%' (inside a percent-encoded sequence such as %5B).
 	if pos == 0 || (s[pos-1] != '[' && s[pos-1] != '%') {
 		if m := matchBareIPv6(s, pos); m > 0 {
 			writeObfuscatedIPv6(b, s[pos:pos+m])
