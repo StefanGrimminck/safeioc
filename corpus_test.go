@@ -189,13 +189,20 @@ func TestCorpusNeutralizes(t *testing.T) {
 // to x byte for byte. Only IOC-shaped items are logged per-line; non-IOC
 // parser-stress inputs are still tested (silently). Entries whose raw text
 // already contains Safe-IOC bracket tokens are skipped (token ambiguity is
-// a known, accepted limitation).
+// a known, accepted limitation). Inputs containing percent-encoded delimiter
+// forms (%2e/%2E, %40, %3a/%3A) in Host, Userinfo, or opaque scheme body
+// are skipped because draft v11 Section 6 documents the round-trip as
+// semantic (not byte-for-byte) for those cases.
 func TestCorpusRoundtrip(t *testing.T) {
 	lines := getCorpus(t)
-	logged, skippedNotIOC, skippedPreObf, failures := 0, 0, 0, 0
+	logged, skippedNotIOC, skippedPreObf, skippedLossy, failures := 0, 0, 0, 0, 0
 	for _, l := range lines {
 		if containsObfuscationTokens(l.text) {
 			skippedPreObf++
+			continue
+		}
+		if lossyByV11(l.text) {
+			skippedLossy++
 			continue
 		}
 		obf := Obfuscate(l.text)
@@ -216,8 +223,50 @@ func TestCorpusRoundtrip(t *testing.T) {
 				l.num, l.text, obf, got)
 		}
 	}
-	t.Logf("roundtrip: %d items tested, %d logged (IOC-shaped), %d silently tested (not-IOC-shaped parser-stress), %d skipped (pre-obfuscated), %d failures",
-		len(lines), logged, skippedNotIOC, skippedPreObf, failures)
+	t.Logf("roundtrip: %d items tested, %d logged (IOC-shaped), %d silently tested (not-IOC-shaped parser-stress), %d skipped (pre-obfuscated), %d skipped (lossy per v11), %d failures",
+		len(lines), logged, skippedNotIOC, skippedPreObf, skippedLossy, failures)
+}
+
+// lossyByV11 reports whether s contains a percent-encoded delimiter form
+// (%2e/%2E, %40, %3a/%3A) in a position that draft v11 Section 4 will
+// decode during obfuscation (Host, Userinfo, or opaque scheme body).
+// Round-trip is documented as semantic (not byte-for-byte) for these
+// inputs in draft v11 Section 6.
+func lossyByV11(s string) bool {
+	region := authorityRegion(s)
+	return strings.Contains(region, "%2e") ||
+		strings.Contains(region, "%2E") ||
+		strings.Contains(region, "%40") ||
+		strings.Contains(region, "%3a") ||
+		strings.Contains(region, "%3A")
+}
+
+// authorityRegion returns the substring of s that draft v11 Section 4 will
+// process via Steps 2 and 3: the Host and Userinfo of a hierarchical URI,
+// the body of an opaque URI, or the whole input (up to the first /?#) when
+// no scheme is present.
+func authorityRegion(s string) string {
+	if s == "" {
+		return ""
+	}
+	start, hier := 0, true
+	if sLen, sepLen, ok := matchScheme(s, 0); ok && acceptAtTop(s[:sLen], sepLen) {
+		start = sLen + sepLen
+		hier = sepLen == 3
+	}
+	end := len(s)
+	for i := start; i < end; i++ {
+		c := s[i]
+		if c == '?' || c == '#' {
+			end = i
+			break
+		}
+		if hier && c == '/' {
+			end = i
+			break
+		}
+	}
+	return s[start:end]
 }
 
 // TestCorpusIdempotent verifies that Obfuscate(Obfuscate(x)) == Obfuscate(x).
