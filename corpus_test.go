@@ -201,7 +201,7 @@ func TestCorpusRoundtrip(t *testing.T) {
 			skippedPreObf++
 			continue
 		}
-		if lossyByV11(l.text) {
+		if lossyBySpec(l.text) {
 			skippedLossy++
 			continue
 		}
@@ -227,18 +227,15 @@ func TestCorpusRoundtrip(t *testing.T) {
 		len(lines), logged, skippedNotIOC, skippedPreObf, skippedLossy, failures)
 }
 
-// lossyByV11 reports whether s contains a percent-encoded delimiter form
-// (%2e/%2E, %40, %3a/%3A) in a position that draft v11 Section 4 will
-// decode during obfuscation (Host, Userinfo, or opaque scheme body).
-// Round-trip is documented as semantic (not byte-for-byte) for these
-// inputs in draft v11 Section 6.
-func lossyByV11(s string) bool {
+// lossyBySpec reports whether s contains a percent-encoded dot (%2e/%2E)
+// in a position that draft Section 4 will decode during obfuscation.
+// Round-trip is documented as equivalent-but-not-byte-identical for these
+// inputs in draft Section 6. Reserved delimiters (%40, %3a/%3A) are no
+// longer decoded as of draft v12 and round-trip byte for byte.
+func lossyBySpec(s string) bool {
 	region := authorityRegion(s)
 	return strings.Contains(region, "%2e") ||
-		strings.Contains(region, "%2E") ||
-		strings.Contains(region, "%40") ||
-		strings.Contains(region, "%3a") ||
-		strings.Contains(region, "%3A")
+		strings.Contains(region, "%2E")
 }
 
 // authorityRegion returns the substring of s that draft v11 Section 4 will

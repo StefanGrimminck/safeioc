@@ -114,24 +114,16 @@ func processAuthority(b *strings.Builder, s string, pos, end int, hier, tryBareI
 			}
 		}
 
-		// Percent-encoded delimiters (%2e/%2E, %40, %3a/%3A) in Host or
-		// Userinfo are decoded to their literal form and then bracketed.
-		// Other percent-encoded content is preserved verbatim. Single-pass
-		// only: %252e and similar are not recognized as delimiter forms.
+		// The percent-encoded dot (%2e/%2E) is decoded and bracketed: the
+		// dot is unreserved, so encoded and decoded forms are equivalent
+		// (RFC 3986 Section 2.3). Reserved delimiters (%40, %3a/%3A) are
+		// NOT decoded (Section 2.2: decoding them changes the URI) and pass
+		// through verbatim like all other percent-encoded content.
+		// Single-pass only: %252e is not recognized as a delimiter form.
 		if c == '%' && i+3 <= end {
 			h1, h2 := s[i+1], s[i+2]
 			if h1 == '2' && (h2 == 'e' || h2 == 'E') {
 				b.WriteString("[.]")
-				i += 3
-				continue
-			}
-			if h1 == '4' && h2 == '0' {
-				b.WriteString("[@]")
-				i += 3
-				continue
-			}
-			if h1 == '3' && (h2 == 'a' || h2 == 'A') {
-				b.WriteString("[:]")
 				i += 3
 				continue
 			}

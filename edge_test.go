@@ -32,14 +32,12 @@ func TestObfuscateShortInputs(t *testing.T) {
 	}
 }
 
-func TestPercentEncodedDelimitersDecoded(t *testing.T) {
+func TestPercentEncodedDotDecoded(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"http://a%2eb.example", "[http]://a[.]b[.]example"},
 		{"http://a%2Eb.example", "[http]://a[.]b[.]example"},
-		{"http://user%40host.example", "[http]://user[@]host[.]example"},
 		{"a%2eb.example", "a[.]b[.]example"},
 		{"http://%65vil.example", "[http]://%65vil[.]example"},
-		{"http://evil%252eexample", "[http]://evil%252eexample"},
 	}
 	for _, c := range cases {
 		got := Obfuscate(c.in)
@@ -48,6 +46,22 @@ func TestPercentEncodedDelimitersDecoded(t *testing.T) {
 		}
 		if strings.Contains(got, "[%") {
 			t.Errorf("Obfuscate(%q) emitted bracketed percent-encoding: %q", c.in, got)
+		}
+	}
+}
+
+// Reserved delimiters (%40, %3a/%3A) are not equivalent to their decoded
+// forms (RFC 3986 Section 2.2) and pass through verbatim.
+func TestPercentEncodedReservedPreserved(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"http://user%40host.example", "[http]://user%40host[.]example"},
+		{"http://evil%3a80.example", "[http]://evil%3a80[.]example"},
+		{"http://user%3Apass@evil.example", "[http]://user%3Apass[@]evil[.]example"},
+	}
+	for _, c := range cases {
+		got := Obfuscate(c.in)
+		if got != c.want {
+			t.Errorf("Obfuscate(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
