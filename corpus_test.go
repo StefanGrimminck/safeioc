@@ -191,7 +191,7 @@ func TestCorpusNeutralizes(t *testing.T) {
 // already contains Safe-IOC bracket tokens are skipped (token ambiguity is
 // a known, accepted limitation). Inputs containing percent-encoded delimiter
 // forms (%2e/%2E, %40, %3a/%3A) in Host, Userinfo, or opaque scheme body
-// are skipped because draft v11 Section 6 documents the round-trip as
+// are skipped because draft Section 6 documents the round-trip as
 // semantic (not byte-for-byte) for those cases.
 func TestCorpusRoundtrip(t *testing.T) {
 	lines := getCorpus(t)
@@ -223,7 +223,7 @@ func TestCorpusRoundtrip(t *testing.T) {
 				l.num, l.text, obf, got)
 		}
 	}
-	t.Logf("roundtrip: %d items tested, %d logged (IOC-shaped), %d silently tested (not-IOC-shaped parser-stress), %d skipped (pre-obfuscated), %d skipped (lossy per v11), %d failures",
+	t.Logf("roundtrip: %d items tested, %d logged (IOC-shaped), %d silently tested (not-IOC-shaped parser-stress), %d skipped (pre-obfuscated), %d skipped (lossy per spec), %d failures",
 		len(lines), logged, skippedNotIOC, skippedPreObf, skippedLossy, failures)
 }
 
@@ -238,7 +238,7 @@ func lossyBySpec(s string) bool {
 		strings.Contains(region, "%2E")
 }
 
-// authorityRegion returns the substring of s that draft v11 Section 4 will
+// authorityRegion returns the substring of s that draft Section 4 will
 // process via Steps 2 and 3: the Host and Userinfo of a hierarchical URI,
 // the body of an opaque URI, or the whole input (up to the first /?#) when
 // no scheme is present.

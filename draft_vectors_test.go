@@ -22,6 +22,8 @@ func TestDraftVectors(t *testing.T) {
 		{"ipv6-in-url", "obfuscate", "http://[2001:db8::1]:8080", "[http]://[2001[:]db8[:][:]1]:8080"},
 		{"ipv6-full-form", "obfuscate", "http://[2001:db8:0:0:0:0:0:1]/", "[http]://[2001[:]db8[:]0[:]0[:]0[:]0[:]0[:]1]/"},
 		{"ipv4-mapped-ipv6", "obfuscate", "http://[::ffff:192.0.2.1]", "[http]://[[:][:]ffff[:]192[.]0[.]2[.]1]"},
+		{"ipv4-embedded-ipv6-wkp", "obfuscate", "http://[64:ff9b::198.51.100.1]/", "[http]://[64[:]ff9b[:][:]198[.]51[.]100[.]1]/"},
+		{"ipv4-embedded-ipv6-nsp", "obfuscate", "2001:db8:122:344::198.51.100.1", "2001[:]db8[:]122[:]344[:][:]198[.]51[.]100[.]1"},
 		{"ipv6-with-zone-id", "obfuscate", "http://[2001:db8::1%25eth0]/", "[http]://[2001[:]db8[:][:]1%25eth0]/"},
 		{"bare-ipv6", "obfuscate", "2001:db8::1", "2001[:]db8[:][:]1"},
 		{"bracketed-bare-ipv6", "obfuscate", "[2001:db8::1]", "[2001[:]db8[:][:]1]"},

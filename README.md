@@ -96,7 +96,8 @@ opaque, so the transformation is idempotent.
 
 - URIs with any scheme (`http`, `https`, `ftp`, `ssh`, `smb`, `mailto`, ...).
 - IPv4 addresses, bare or inside URIs.
-- IPv6 literals: `::` shorthand, full eight-group form, IPv4-mapped addresses,
+- IPv6 literals: `::` shorthand, full eight-group form, IPv4-mapped and
+  IPv4-embedded addresses (including the well-known prefix `64:ff9b::/96`),
   and zone identifiers per RFC 9844.
 - Bare email addresses.
 - Nested indicators in Path, Query, or Fragment (open-redirect targets, email

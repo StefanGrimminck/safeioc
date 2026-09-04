@@ -23,6 +23,7 @@ var obfuscationVectors = []vector{
 	{"IPv6 no port", "http://[2001:db8::1]/", "[http]://[2001[:]db8[:][:]1]/"},
 	{"IPv6 full form", "http://[2001:db8:0:0:0:0:0:1]/", "[http]://[2001[:]db8[:]0[:]0[:]0[:]0[:]0[:]1]/"},
 	{"IPv4-mapped IPv6", "http://[::ffff:192.0.2.1]", "[http]://[[:][:]ffff[:]192[.]0[.]2[.]1]"},
+	{"IPv4-embedded IPv6, well-known prefix", "64:ff9b::198.51.100.1", "64[:]ff9b[:][:]198[.]51[.]100[.]1"},
 	{"IPv6 with zone", "http://[2001:db8::1%25eth0]/", "[http]://[2001[:]db8[:][:]1%25eth0]/"},
 	{"Bare IPv6", "2001:db8::1", "2001[:]db8[:][:]1"},
 	{"Bare IPv6 loopback", "::1", "[:][:]1"},
