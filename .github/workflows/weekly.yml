@@ -1,0 +1,63 @@
+name: Weekly
+
+# Checks against sources that change without a commit here: the current
+# web-platform-tests URL data and the IANA list of top-level domains. Also
+# fuzzes for longer than the push workflow does.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upstream-wpt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: corpus tests against current WPT data
+        env:
+          SAFEIOC_WPT: latest
+        run: go test -count=1 -run 'Corpus|Linkifier|Text' .
+
+  tld-list:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: regenerate tlds.go from the IANA list
+        run: go generate ./...
+      - name: report added or removed TLDs
+        run: |
+          # The version header changes daily; only a change in names matters.
+          if git diff -U0 tlds.go | grep -E '^[+-]\s+"' ; then
+            echo "::error::The IANA TLD list changed. Run 'go generate ./...' and commit tlds.go."
+            exit 1
+          fi
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: fuzz (5 min per target)
+        run: |
+          for f in FuzzIndicator FuzzText FuzzSafety; do
+            go test -run='^$' -fuzz="^$f\$" -fuzztime=5m .
+          done
+      - name: upload fuzz failures
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failures
+          path: testdata/fuzz
+          if-no-files-found: ignore
