@@ -1,0 +1,40 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest version go.mod allows, and the current release.
+        go: ["1.18", "stable"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: gofmt
+        if: matrix.go == 'stable'
+        run: test -z "$(gofmt -l .)" || { gofmt -d .; exit 1; }
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: golangci-lint
+        if: matrix.go == 'stable'
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.15.0
+
+      - name: go test
+        run: go test -race -count=1 ./...

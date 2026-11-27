@@ -1,0 +1,53 @@
+version: "2"
+
+run:
+  go: "1.18"
+
+linters:
+  enable:
+    - dupword
+    - errorlint
+    - exhaustive
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - misspell
+    - nakedret
+    - nestif
+    - nilerr
+    - nolintlint
+    - perfsprint
+    - prealloc
+    - predeclared
+    - revive
+    - thelper
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+    - whitespace
+  settings:
+    gocognit:
+      min-complexity: 20
+    gocyclo:
+      min-complexity: 15
+    gocritic:
+      enabled-tags: [diagnostic, style, performance]
+    revive:
+      rules:
+        - name: confusing-naming
+        - name: early-return
+        - name: exported
+        - name: indent-error-flow
+        - name: package-comments
+        - name: receiver-naming
+        - name: unexported-return
+        - name: unused-parameter
+        - name: var-naming
+  exclusions:
+    rules:
+      # Test tables repeat literal vectors on purpose.
+      - path: _test\.go
+        linters: [goconst]

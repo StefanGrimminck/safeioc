@@ -1,0 +1,7 @@
+*.test
+*.out
+/safeioc
+/cmd/safeioc/safeioc
+coverage.out
+coverage.html
+.venv/
