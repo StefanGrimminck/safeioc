@@ -17,9 +17,9 @@ jobs:
         # The oldest version go.mod allows, and the current release.
         go: ["1.18", "stable"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go }}
 
@@ -32,7 +32,7 @@ jobs:
 
       - name: golangci-lint
         if: matrix.go == 'stable'
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
 
